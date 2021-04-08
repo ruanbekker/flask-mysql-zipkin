@@ -1,0 +1,89 @@
+version: "3.9"
+
+services:
+  traefik:
+    image: traefik:v2.4.5
+    container_name: traefik
+    command: [ '--providers.docker', '--api.insecure' ]
+    networks:
+      - contained
+    ports:
+      - 80:80
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    labels:
+      - "traefik.http.routers.traefik.rule=Host(`traefik.localdns.xyz`)"
+      - "traefik.http.services.traefik.loadbalancer.server.port=8080"
+
+  zipkin:
+    image: openzipkin/zipkin:latest
+    container_name: zipkin
+    ports:
+      - "9411:9411"
+    networks:
+      - contained
+    depends_on:
+      - traefik
+    labels:
+      - "traefik.http.routers.zipkin.rule=Host(`zipkin.localdns.xyz`)"
+      - "traefik.http.services.zipkin.loadbalancer.server.port=9411"
+
+  app-frontend:
+    build:
+      context: app_frontend
+    container_name: app-frontend
+    restart: unless-stopped
+    environment:
+      - 'ZIPKIN_DSN=http://zipkin:9411/api/v1/spans'
+      - APP_BACKEND_URL=http://app-backend:5000/api/v1/list
+    networks:
+      - contained
+    depends_on:
+      - traefik
+      - app-backend
+      - app-database
+    labels:
+      - "traefik.http.routers.app-frontend.rule=Host(`app.localdns.xyz`)"
+      - "traefik.http.services.app-frontend.loadbalancer.server.port=5000"
+
+  app-backend:
+    build:
+      context: app_backend
+    container_name: app-backend
+    restart: unless-stopped
+    environment:
+      - 'ZIPKIN_DSN=http://zipkin:9411/api/v1/spans'
+      - MYSQL_HOST=app-database
+      - MYSQL_USER=app
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=appdb
+    networks:
+      - contained
+    depends_on:
+      - traefik
+      - app-database
+    labels:
+      - "traefik.http.routers.app-backend.rule=Host(`api.localdns.xyz`)"
+      - "traefik.http.services.app-backend.loadbalancer.server.port=5000"
+
+  app-database:
+    image: mysql:8.0
+    container_name: app-database
+    command: --default-authentication-plugin=mysql_native_password --init-file=/data/application/init.sql
+    restart: unless-stopped
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      - MYSQL_ROOT_PASSWORD=password
+      - MYSQL_USER=app
+      - MYSQL_PASSWORD=password
+      - MYSQL_DATABASE=appdb
+    volumes:
+      #- ./mysqldata:/var/lib/mysql
+      - ./init.sql:/data/application/init.sql
+    networks:
+      - contained
+
+networks:
+  contained:
+    name: contained
