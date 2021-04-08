@@ -1,0 +1,7 @@
+Flask
+Flask-SQLAlchemy
+flask-marshmallow
+marshmallow-sqlalchemy
+pymysql
+py_zipkin
+requests
