@@ -1,16 +1,23 @@
 import requests
+import logging
+import sys
 from flask import Flask, jsonify, request
 from py_zipkin.zipkin import zipkin_span, create_http_headers_for_new_span, ZipkinAttrs, Kind, zipkin_client_span
 from py_zipkin.request_helpers import create_http_headers
 from py_zipkin.encoding import Encoding
 
-app = Flask(__name__)
+logging.basicConfig(
+    stream=sys.stdout,
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] - %(name)s %(threadName)s : %(message)s'
+)
 
+app = Flask(__name__)
 app.config['JSON_SORT_KEYS'] = False
 
 def default_handler(encoded_span):
     body = encoded_span
-    app.logger.debug("body %s", body)
+    app.logger.info("body %s", body)
     return requests.post(
         "http://zipkin:9411/api/v2/spans",
         data=body,
@@ -19,8 +26,8 @@ def default_handler(encoded_span):
 
 @app.before_request
 def log_request_info():
-    app.logger.debug('Headers: %s', request.headers)
-    app.logger.debug('Body: %s', request.get_data())
+    app.logger.info('Headers: %s', request.headers)
+    app.logger.info('Body: %s', request.get_data())
 
 @zipkin_client_span(service_name='app-frontend', span_name='call_backend')
 def call_backend():
@@ -42,4 +49,4 @@ def index():
     return response, 200
 
 if __name__ == '__main__':
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
