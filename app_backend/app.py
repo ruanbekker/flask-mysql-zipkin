@@ -1,9 +1,10 @@
+import logging
+import requests
+import sys
 from flask import Flask, jsonify, request, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from marshmallow import Schema, fields, ValidationError, pre_load
 from os import environ
-
-import requests
 from py_zipkin.zipkin import zipkin_span, create_http_headers_for_new_span, ZipkinAttrs, Kind, zipkin_client_span
 from py_zipkin.encoding import Encoding
 
@@ -42,6 +43,7 @@ class InventorySchema(Schema):
 
 def default_handler(encoded_span):
     body = encoded_span
+    app.logger.info("body %s", body)
     return requests.post(
         "http://zipkin:9411/api/v2/spans",
         data=body,
@@ -50,8 +52,8 @@ def default_handler(encoded_span):
 
 @app.before_request
 def log_request_info():
-    app.logger.debug('Headers: %s', request.headers)
-    app.logger.debug('Body: %s', request.get_data())
+    app.logger.info('Headers: %s', request.headers)
+    app.logger.info('Body: %s', request.get_data())
 
 @zipkin_client_span(service_name='app-backend', span_name='dbcall_app_backend')
 def dbcall():
@@ -82,4 +84,4 @@ def index():
 
 if __name__ == '__main__':
     db.create_all()
-    app.run(host="0.0.0.0", port=5000, debug=False)
+    app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)
